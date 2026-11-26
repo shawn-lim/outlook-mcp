@@ -8,7 +8,9 @@
     "auth-server": "node outlook-auth-server.js",
     "test-mode": "USE_TEST_MODE=true node index.js",
     "inspect": "npx @modelcontextprotocol/inspector node index.js",
-    "test": "jest"
+    "test": "jest",
+    "setup": "node scripts/setup.js",
+    "status": "node scripts/setup.js status"
   },
   "keywords": [
     "claude",
