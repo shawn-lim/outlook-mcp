@@ -167,6 +167,12 @@ picked up without restarting Claude. `check-auth-status` shows which account a s
 For personal Microsoft accounts set `MS_TENANT_ID=consumers` and choose an app
 registration audience that includes personal accounts.
 
+## EA Bulk Tools (server-side)
+
+Run inside the MCP server, so any connected chat can use them and only a summary comes back:
+- `mailbox-stats` — scan up to 100k messages; top senders/domains with unread counts.
+- `bulk-email-action` — move / archive / mark-read all mail from a sender or `@domain`, via Graph `$batch`. **Dry run by default**; executes only with `dryRun: false`.
+
 ## Code Execution Mode (bulk tasks)
 
 For large jobs (thousands of messages, bulk filing, reports), have the agent write a short

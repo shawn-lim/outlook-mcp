@@ -7,6 +7,7 @@ const handleReadEmail = require('./read');
 const handleSendEmail = require('./send');
 const handleDraftEmail = require('./draft');
 const handleMarkAsRead = require('./mark-as-read');
+const { bulkTools } = require('./bulk');
 
 // Email tool definitions
 const emailTools = [
@@ -193,7 +194,8 @@ const emailTools = [
       required: ["id"]
     },
     handler: handleMarkAsRead
-  }
+  },
+  ...bulkTools
 ];
 
 module.exports = {
