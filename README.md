@@ -128,6 +128,46 @@ A comprehensive MCP (Model Context Protocol) server that connects Claude with Mi
 6. **Authenticate**: Use the authenticate tool in Claude to get the OAuth URL
 7. **Start using**: Access your M365 data through Claude!
 
+## Multiple Accounts
+
+One Azure app registration serves every mailbox; each account gets its own token file
+(`~/.outlook-mcp/<account>.json`). Client ID/secret/tenant stay in `.env`.
+
+1. Sign in each account once (one at a time; both use port 3333):
+   ```bash
+   node outlook-auth-server.js --account personal   # open http://localhost:3333/auth, sign in, Ctrl+C
+   node outlook-auth-server.js --account second
+   ```
+2. Register one server entry per account with `OUTLOOK_ACCOUNT` (see `claude-config-sample.json`):
+   ```bash
+   claude mcp add outlook-personal --scope user -e OUTLOOK_ACCOUNT=personal -- node /path/to/outlook-mcp/index.js
+   claude mcp add outlook-second   --scope user -e OUTLOOK_ACCOUNT=second   -- node /path/to/outlook-mcp/index.js
+   ```
+Access tokens refresh automatically from the stored refresh token. A fresh sign-in is
+picked up without restarting Claude. `check-auth-status` shows which account a server uses.
+
+For personal Microsoft accounts set `MS_TENANT_ID=consumers` and choose an app
+registration audience that includes personal accounts.
+
+## Code Execution Mode (bulk tasks)
+
+For large jobs (thousands of messages, bulk filing, reports), have the agent write a short
+script against `lib/` instead of calling MCP tools one by one. Data is processed in code and
+only a summary reaches the model — the pattern described in Anthropic's
+[Code execution with MCP](https://www.anthropic.com/engineering/code-execution-with-mcp).
+
+```js
+const { createClient } = require('./lib');
+const mail = createClient({ account: 'personal' });          // read-only by default
+for await (const m of mail.paginate('me/mailFolders/inbox/messages',
+    { $select: 'from,subject,isRead', $top: 100 }, { max: 5000 })) { /* aggregate */ }
+```
+
+- Same token files as the MCP server; `listAccounts()` shows signed-in accounts.
+- `post/patch/delete` throw unless `createClient({ ..., allowWrites: true })` — enable only after
+  the user confirms the specific action.
+- Example: `node scripts/inbox-top-senders.js --account personal --max 2000`
+
 ## Installation
 
 ### Prerequisites

@@ -26,7 +26,7 @@ const baseConfig = {
 
 describe('TokenStorage', () => {
   let tokenStorage;
-  const tokenStorePath = path.join(mockHomeDir, '.outlook-mcp-tokens.json');
+  const tokenStorePath = require('../../config').AUTH_CONFIG.tokenStorePath;
 
   beforeEach(() => {
     jest.resetAllMocks();
@@ -63,7 +63,7 @@ describe('TokenStorage', () => {
     });
 
     it('should return null and log if file does not exist (ENOENT)', async () => {
-      const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
+      const consoleLogSpy = jest.spyOn(console, 'error').mockImplementation();
       fs.readFile.mockRejectedValue({ code: 'ENOENT' });
       const loaded = await tokenStorage._loadTokensFromFile();
       expect(loaded).toBeNull();
@@ -541,7 +541,7 @@ describe('TokenStorage', () => {
 
     it('should log if token file does not exist during unlink', async () => {
       fs.unlink.mockRejectedValue({ code: 'ENOENT' });
-      const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
+      const consoleLogSpy = jest.spyOn(console, 'error').mockImplementation();
 
       await tokenStorage.clearTokens();
 

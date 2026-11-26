@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-require("dotenv").config();
+// stdout is the MCP JSON-RPC channel; route any stray console.log to stderr.
+console.log = console.error;
 /**
  * M365 Assistant MCP Server - Main entry point
  *
@@ -23,6 +24,7 @@ const { powerAutomateTools } = require('./power-automate');
 // Log startup information
 console.error(`STARTING ${config.SERVER_NAME.toUpperCase()} MCP SERVER`);
 console.error(`Test mode is ${config.USE_TEST_MODE ? 'enabled' : 'disabled'}`);
+console.error(`Account: ${config.AUTH_CONFIG.account} (tokens: ${config.AUTH_CONFIG.tokenStorePath})`);
 
 // Combine all tools
 const TOOLS = [

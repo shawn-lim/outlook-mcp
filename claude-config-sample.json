@@ -1,16 +1,14 @@
 {
   "mcpServers": {
-    "outlook-assistant": {
+    "outlook-personal": {
       "command": "node",
-      "args": [
-        "/path/to/outlook-mcp/index.js"
-      ],
-      "env": {
-        "USE_TEST_MODE": "false",
-        "OUTLOOK_CLIENT_ID": "your-client-id-here",
-        "OUTLOOK_CLIENT_SECRET": "your-client-secret-here",
-        "MS_SCOPES": "offline_access User.Read Mail.Read Mail.ReadWrite Mail.Send Calendars.Read Calendars.ReadWrite Contacts.Read"
-      }
+      "args": ["C:\\Users\\you\\repos\\outlook-mcp\\index.js"],
+      "env": { "OUTLOOK_ACCOUNT": "personal" }
+    },
+    "outlook-second": {
+      "command": "node",
+      "args": ["C:\\Users\\you\\repos\\outlook-mcp\\index.js"],
+      "env": { "OUTLOOK_ACCOUNT": "second" }
     }
   }
 }

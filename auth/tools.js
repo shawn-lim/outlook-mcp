@@ -39,12 +39,13 @@ async function handleAuthenticate(args) {
   }
   
   // For real authentication, generate an auth URL and instruct the user to visit it
-  const authUrl = `${config.AUTH_CONFIG.authServerUrl}/auth?client_id=${config.AUTH_CONFIG.clientId}`;
-  
+  const { account, authServerUrl } = config.AUTH_CONFIG;
+  const authUrl = `${authServerUrl}/auth`;
+
   return {
     content: [{
       type: "text",
-      text: `Authentication required. Please visit the following URL to authenticate with Microsoft: ${authUrl}\n\nAfter authentication, you will be redirected back to this application.`
+      text: `To sign in account "${account}":\n1. In the outlook-mcp folder run: node outlook-auth-server.js --account ${account}\n2. Open ${authUrl} and complete the Microsoft sign-in.\nTokens then refresh automatically; no restart needed.`
     }]
   };
 }
@@ -54,26 +55,24 @@ async function handleAuthenticate(args) {
  * @returns {object} - MCP response
  */
 async function handleCheckAuthStatus() {
-  console.error('[CHECK-AUTH-STATUS] Starting authentication status check');
-  
-  const tokens = tokenManager.loadTokenCache();
-  
-  console.error(`[CHECK-AUTH-STATUS] Tokens loaded: ${tokens ? 'YES' : 'NO'}`);
-  
-  if (!tokens || !tokens.access_token) {
-    console.error('[CHECK-AUTH-STATUS] No valid access token found');
-    return {
-      content: [{ type: "text", text: "Not authenticated" }]
-    };
+  const { account, tokenStorePath } = config.AUTH_CONFIG;
+  if (config.USE_TEST_MODE) {
+    const tokens = tokenManager.loadTokenCache();
+    return { content: [{ type: "text", text: tokens ? "Authenticated (test mode)" : "Not authenticated (test mode)" }] };
   }
-  
-  console.error('[CHECK-AUTH-STATUS] Access token present');
-  console.error(`[CHECK-AUTH-STATUS] Token expires at: ${tokens.expires_at}`);
-  console.error(`[CHECK-AUTH-STATUS] Current time: ${Date.now()}`);
-  
-  return {
-    content: [{ type: "text", text: "Authenticated and ready" }]
-  };
+  // Lazy require avoids a circular import (auth/index.js requires this file).
+  const { getTokenStorage } = require('./index');
+  try {
+    const ts = getTokenStorage();
+    const token = await ts.getValidAccessToken(); // refreshes if expired
+    if (!token) {
+      return { content: [{ type: "text", text: `Not authenticated (account: ${account}). Run: node outlook-auth-server.js --account ${account}  then open http://localhost:3333/auth` }] };
+    }
+    const mins = Math.round((ts.getExpiryTime() - Date.now()) / 60000);
+    return { content: [{ type: "text", text: `Authenticated and ready (account: ${account}, access token valid ~${mins} min, auto-refreshes). Token file: ${tokenStorePath}` }] };
+  } catch (error) {
+    return { content: [{ type: "text", text: `Auth check failed (account: ${account}): ${error.message}` }] };
+  }
 }
 
 // Tool definitions
