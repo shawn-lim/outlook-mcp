@@ -24,6 +24,11 @@ description: Use for large Outlook jobs (scanning, summarizing, or filing hundre
 3. Print a **compact JSON summary** to stdout (counts, top-N, IDs only when needed next). Never print full bodies or raw pages.
 4. Run it, read the summary, report to Shawn.
 
+## Token budget
+- Script output: aim for under ~2k tokens (top-N lists, counts). Never dump raw pages, bodies or full ID lists.
+- Direct tools: `list-emails`/`search-emails` max 50 per call; `read-email` bodies are capped at 6000 chars (`maxChars` to raise). Read bodies only when needed.
+- Over ~50 items, or anything that needs aggregation, write a script.
+
 ## Writes (move, delete, send, PATCH, rules)
 - `post/patch/delete` throw unless `createClient({ account, allowWrites: true })`.
 - Before enabling writes: run a read-only dry run, show Shawn exactly what will change (count, sample, destination), and get an explicit yes in chat. Sending mail and permanent deletes always need that confirmation.
