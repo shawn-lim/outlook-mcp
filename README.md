@@ -128,6 +128,18 @@ A comprehensive MCP (Model Context Protocol) server that connects Claude with Mi
 6. **Authenticate**: Use the authenticate tool in Claude to get the OAuth URL
 7. **Start using**: Access your M365 data through Claude!
 
+## Quick Setup (per account)
+
+```bash
+npm install
+cp .env.example .env        # paste OUTLOOK_CLIENT_ID + OUTLOOK_CLIENT_SECRET once
+npm run setup -- personal   # opens browser to sign in, then registers in Claude Desktop + Claude Code
+npm run setup -- hotmail    # repeat for each mailbox
+npm run status              # sign-in + registration state of every account
+```
+Then fully quit and reopen Claude Desktop. Config files are backed up to `*.bak` before edits.
+`--reauth` forces a fresh sign-in (e.g. to switch which Microsoft account a name points to).
+
 ## Multiple Accounts
 
 One Azure app registration serves every mailbox; each account gets its own token file
