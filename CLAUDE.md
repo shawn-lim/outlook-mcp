@@ -36,7 +36,9 @@ Each module exports tools and handlers:
 - `utils/` - Shared utilities including Graph API client and OData helpers
 
 ### Key Components
-- **Token Management**: Tokens stored in `~/.outlook-mcp-tokens.json` (both Graph and Flow tokens)
+- **Token Management**: Per-account token files `~/.outlook-mcp/<OUTLOOK_ACCOUNT>.json` (legacy default `~/.outlook-mcp-tokens.json`; override with `OUTLOOK_TOKEN_PATH`). `auth/index.js` refreshes expired access tokens via `TokenStorage`.
+- **lib/**: `createClient({ account })` for bulk/code-execution scripts; read-only unless `allowWrites: true`. Prefer a script for large jobs; never enable writes without user confirmation.
+- **stdout**: reserved for MCP JSON-RPC — log with `console.error` only.
 - **Graph API Client**: `utils/graph-api.js` handles Microsoft Graph API calls (Outlook, OneDrive)
 - **Flow API Client**: `power-automate/flow-api.js` handles Power Automate API calls
 - **Test Mode**: Mock data responses when `USE_TEST_MODE=true`

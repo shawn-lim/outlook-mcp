@@ -2,23 +2,20 @@ const fs = require('fs').promises;
 const path = require('path');
 const https = require('https');
 const querystring = require('querystring');
+const appConfig = require('../config');
 
 class TokenStorage {
   constructor(config) {
-    const tenantId = process.env.MS_TENANT_ID || 'common';
-    const authorityHost = (process.env.MS_AUTHORITY_HOST || 'https://login.microsoftonline.com').replace(/\/+$/, '');
+    const auth = appConfig.AUTH_CONFIG;
 
     this.config = {
-      tokenStorePath: path.join(process.env.HOME || process.env.USERPROFILE, '.outlook-mcp-tokens.json'),
-      clientId: process.env.MS_CLIENT_ID,
-      clientSecret: process.env.MS_CLIENT_SECRET,
-      redirectUri: process.env.MS_REDIRECT_URI || 'http://localhost:3333/auth/callback',
-      scopes: (process.env.MS_SCOPES ||
-        'offline_access User.Read Mail.Read Mail.ReadWrite Mail.Send Calendars.Read Calendars.ReadWrite Contacts.Read')
-        .split(/\s+/)
-        .filter(Boolean),
-      tenantId,
-      tokenEndpoint: process.env.MS_TOKEN_ENDPOINT || `${authorityHost}/${tenantId}/oauth2/v2.0/token`,
+      tokenStorePath: auth.tokenStorePath,
+      clientId: auth.clientId,
+      clientSecret: auth.clientSecret,
+      redirectUri: auth.redirectUri,
+      scopes: auth.scopes,
+      tenantId: auth.tenantId,
+      tokenEndpoint: auth.tokenEndpoint,
       refreshTokenBuffer: 5 * 60 * 1000, // 5 minutes buffer for token refresh
       ...config // Allow overriding default config
     };
@@ -35,11 +32,11 @@ class TokenStorage {
     try {
       const tokenData = await fs.readFile(this.config.tokenStorePath, 'utf8');
       this.tokens = JSON.parse(tokenData);
-      console.log('Tokens loaded from file.');
+      console.error('Tokens loaded from file.');
       return this.tokens;
     } catch (error) {
       if (error.code === 'ENOENT') {
-        console.log('Token file not found. No tokens loaded.');
+        console.error('Token file not found. No tokens loaded.');
       } else {
         console.error('Error loading token cache:', error);
       }
@@ -54,8 +51,9 @@ class TokenStorage {
       return false;
     }
     try {
+      if (fs.mkdir) await fs.mkdir(path.dirname(this.config.tokenStorePath), { recursive: true });
       await fs.writeFile(this.config.tokenStorePath, JSON.stringify(this.tokens, null, 2));
-      console.log('Tokens saved successfully.');
+      console.error('Tokens saved successfully.');
       // return true; // No longer returning boolean, will throw on error.
     } catch (error) {
       console.error('Error saving token cache:', error);
@@ -91,12 +89,12 @@ class TokenStorage {
     await this.getTokens(); // Ensure tokens are loaded
 
     if (!this.tokens || !this.tokens.access_token) {
-      console.log('No access token available.');
+      console.error('No access token available.');
       return null;
     }
 
     if (this.isTokenExpired()) {
-      console.log('Access token expired or nearing expiration. Attempting refresh.');
+      console.error('Access token expired or nearing expiration. Attempting refresh.');
       if (this.tokens.refresh_token) {
         try {
           return await this.refreshAccessToken();
@@ -123,11 +121,11 @@ class TokenStorage {
 
     // Prevent multiple concurrent refresh attempts
     if (this._refreshPromise) {
-        console.log("Refresh already in progress, returning existing promise.");
+        console.error("Refresh already in progress, returning existing promise.");
         return this._refreshPromise.then(tokens => tokens.access_token);
     }
 
-    console.log('Attempting to refresh access token...');
+    console.error('Attempting to refresh access token...');
     const postData = querystring.stringify({
       client_id: this.config.clientId,
       client_secret: this.config.clientSecret,
@@ -161,7 +159,7 @@ class TokenStorage {
                         this.tokens.expires_at = Date.now() + (responseBody.expires_in * 1000);
                         try {
                             await this._saveTokensToFile();
-                            console.log('Access token refreshed and saved successfully.');
+                            console.error('Access token refreshed and saved successfully.');
                             resolve(this.tokens);
                         } catch (saveError) {
                             console.error('Failed to save refreshed tokens:', saveError);
@@ -200,7 +198,7 @@ class TokenStorage {
     if (!this.config.clientId || !this.config.clientSecret) {
         throw new Error("Client ID or Client Secret is not configured. Cannot exchange code for tokens.");
     }
-    console.log('Exchanging authorization code for tokens...');
+    console.error('Exchanging authorization code for tokens...');
     const postData = querystring.stringify({
       client_id: this.config.clientId,
       client_secret: this.config.clientSecret,
@@ -236,7 +234,7 @@ class TokenStorage {
               };
               try {
                 await this._saveTokensToFile();
-                console.log('Tokens exchanged and saved successfully.');
+                console.error('Tokens exchanged and saved successfully.');
                 resolve(this.tokens);
               } catch (saveError) {
                 console.error('Failed to save exchanged tokens:', saveError);
@@ -268,10 +266,10 @@ class TokenStorage {
     this.tokens = null;
     try {
       await fs.unlink(this.config.tokenStorePath);
-      console.log('Token file deleted successfully.');
+      console.error('Token file deleted successfully.');
     } catch (error) {
       if (error.code === 'ENOENT') {
-        console.log('Token file not found, nothing to delete.');
+        console.error('Token file not found, nothing to delete.');
       } else {
         console.error('Error deleting token file:', error);
       }

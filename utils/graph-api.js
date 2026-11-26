@@ -5,6 +5,9 @@ const https = require('https');
 const config = require('../config');
 const mockData = require('./mock-data');
 
+// Per-request tracing is noisy (and costs tokens when scripts relay stderr); opt in with OUTLOOK_DEBUG=true.
+const debug = (...args) => { if (config.DEBUG) console.error(...args); };
+
 /**
  * Makes a request to the Microsoft Graph API
  * @param {string} accessToken - The access token for authentication
@@ -17,19 +20,19 @@ const mockData = require('./mock-data');
 async function callGraphAPI(accessToken, method, path, data = null, queryParams = {}) {
   // For test tokens, we'll simulate the API call
   if (config.USE_TEST_MODE && accessToken.startsWith('test_access_token_')) {
-    console.error(`TEST MODE: Simulating ${method} ${path} API call`);
+    debug(`TEST MODE: Simulating ${method} ${path} API call`);
     return mockData.simulateGraphAPIResponse(method, path, data, queryParams);
   }
 
   try {
-    console.error(`Making real API call: ${method} ${path}`);
+    debug(`Making real API call: ${method} ${path}`);
     
     // Check if path already contains the full URL (from nextLink)
     let finalUrl;
     if (path.startsWith('http://') || path.startsWith('https://')) {
       // Path is already a full URL (from pagination nextLink)
       finalUrl = path;
-      console.error(`Using full URL from nextLink: ${finalUrl}`);
+      debug(`Using full URL from nextLink: ${finalUrl}`);
     } else {
       // Build URL from path and queryParams
       // Encode path segments properly
@@ -67,11 +70,11 @@ async function callGraphAPI(accessToken, method, path, data = null, queryParams 
           queryString = '?' + queryString;
         }
         
-        console.error(`Query string: ${queryString}`);
+        debug(`Query string: ${queryString}`);
       }
       
       finalUrl = `${config.GRAPH_API_ENDPOINT}${encodedPath}${queryString}`;
-      console.error(`Full URL: ${finalUrl}`);
+      debug(`Full URL: ${finalUrl}`);
     }
     
     return new Promise((resolve, reject) => {
@@ -151,12 +154,12 @@ async function callGraphAPIPaginated(accessToken, method, path, queryParams = {}
       // Add items from this page
       if (response.value && Array.isArray(response.value)) {
         allItems.push(...response.value);
-        console.error(`Pagination: Retrieved ${response.value.length} items, total so far: ${allItems.length}`);
+        debug(`Pagination: Retrieved ${response.value.length} items, total so far: ${allItems.length}`);
       }
 
       // Check if we've reached the desired count
       if (maxCount > 0 && allItems.length >= maxCount) {
-        console.error(`Pagination: Reached max count of ${maxCount}, stopping`);
+        debug(`Pagination: Reached max count of ${maxCount}, stopping`);
         break;
       }
 
@@ -167,14 +170,14 @@ async function callGraphAPIPaginated(accessToken, method, path, queryParams = {}
         // Pass the full nextLink URL directly to callGraphAPI
         currentUrl = nextLink;
         currentParams = {}; // nextLink already contains all params
-        console.error(`Pagination: Following nextLink, ${allItems.length} items so far`);
+        debug(`Pagination: Following nextLink, ${allItems.length} items so far`);
       }
     } while (nextLink);
 
     // Trim to exact count if needed
     const finalItems = maxCount > 0 ? allItems.slice(0, maxCount) : allItems;
 
-    console.error(`Pagination complete: Retrieved ${finalItems.length} total items`);
+    debug(`Pagination complete: Retrieved ${finalItems.length} total items`);
     
     return {
       value: finalItems,
@@ -196,7 +199,7 @@ async function callGraphAPIPaginated(accessToken, method, path, queryParams = {}
 async function callGraphAPIDownload(accessToken, path) {
   // For test tokens, simulate download
   if (config.USE_TEST_MODE && accessToken.startsWith('test_access_token_')) {
-    console.error(`TEST MODE: Simulating download for ${path}`);
+    debug(`TEST MODE: Simulating download for ${path}`);
     return `https://example.com/download/${Date.now()}`;
   }
 

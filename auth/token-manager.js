@@ -31,8 +31,6 @@ function loadTokenCache() {
       Modified: ${stats.mtime}`);
     
     const tokenData = fs.readFileSync(tokenPath, 'utf8');
-    console.error('[DEBUG] Token file contents length:', tokenData.length);
-    console.error('[DEBUG] Token file first 200 characters:', tokenData.slice(0, 200));
     
     try {
       const tokens = JSON.parse(tokenData);
