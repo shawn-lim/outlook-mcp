@@ -183,6 +183,7 @@ const server = http.createServer((req, res) => {
       redirect_uri: AUTH_CONFIG.redirectUri,
       scope: AUTH_CONFIG.scopes.join(' '),
       response_mode: 'query',
+      prompt: 'select_account', // always show the account picker so each account name gets the right mailbox
       state: Date.now().toString() // Simple state parameter for security
     };
     
