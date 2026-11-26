@@ -19,8 +19,8 @@ const INDEX = path.join(REPO, 'index.js');
 
 /**
  * Claude Desktop config file(s). The Microsoft Store (MSIX) build of Claude on Windows
- * reads from its sandbox (%LOCALAPPDATA%\\Packages\\Claude_*\\LocalCache\\Roaming\\Claude),
- * not %APPDATA%\\Claude, so we target every location that exists.
+ * reads from %LOCALAPPDATA%\\Claude-Data\\<pkg> (newer) or its MSIX sandbox, not
+ * %APPDATA%\\Claude, so we target every location that exists.
  */
 function desktopConfigPaths() {
   if (process.env.CLAUDE_DESKTOP_CONFIG) return [process.env.CLAUDE_DESKTOP_CONFIG];
@@ -30,13 +30,19 @@ function desktopConfigPaths() {
   if (process.platform !== 'win32') return [path.join(home, '.config', 'Claude', file)];
 
   const paths = [];
-  const pkgs = path.join(process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local'), 'Packages');
-  try {
-    for (const d of fs.readdirSync(pkgs)) {
-      const dir = path.join(pkgs, d, 'LocalCache', 'Roaming', 'Claude');
-      if (/^Claude_/i.test(d) && fs.existsSync(dir)) paths.push(path.join(dir, file));
-    }
-  } catch (_) { /* no Packages dir */ }
+  const local = process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local');
+  const scan = (root, match, sub) => {
+    try {
+      for (const d of fs.readdirSync(root)) {
+        const dir = path.join(root, d, ...sub);
+        if (match.test(d) && fs.existsSync(dir)) paths.push(path.join(dir, file));
+      }
+    } catch (_) { /* root missing */ }
+  };
+  // Newer builds: %LOCALAPPDATA%\Claude-Data\<package id>\claude_desktop_config.json
+  scan(path.join(local, 'Claude-Data'), /^claude_/i, []);
+  // Microsoft Store (MSIX) sandbox: %LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude
+  scan(path.join(local, 'Packages'), /^Claude_/i, ['LocalCache', 'Roaming', 'Claude']);
   const classic = path.join(process.env.APPDATA || path.join(home, 'AppData', 'Roaming'), 'Claude', file);
   if (!paths.length || fs.existsSync(classic)) paths.push(classic);
   return paths;
