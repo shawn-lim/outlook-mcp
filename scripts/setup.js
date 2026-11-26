@@ -17,12 +17,29 @@ const { spawn } = require('child_process');
 const REPO = path.resolve(__dirname, '..');
 const INDEX = path.join(REPO, 'index.js');
 
-function desktopConfigPath() {
-  if (process.env.CLAUDE_DESKTOP_CONFIG) return process.env.CLAUDE_DESKTOP_CONFIG;
+/**
+ * Claude Desktop config file(s). The Microsoft Store (MSIX) build of Claude on Windows
+ * reads from its sandbox (%LOCALAPPDATA%\\Packages\\Claude_*\\LocalCache\\Roaming\\Claude),
+ * not %APPDATA%\\Claude, so we target every location that exists.
+ */
+function desktopConfigPaths() {
+  if (process.env.CLAUDE_DESKTOP_CONFIG) return [process.env.CLAUDE_DESKTOP_CONFIG];
   const home = os.homedir();
-  if (process.platform === 'win32') return path.join(process.env.APPDATA || path.join(home, 'AppData', 'Roaming'), 'Claude', 'claude_desktop_config.json');
-  if (process.platform === 'darwin') return path.join(home, 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
-  return path.join(home, '.config', 'Claude', 'claude_desktop_config.json');
+  const file = 'claude_desktop_config.json';
+  if (process.platform === 'darwin') return [path.join(home, 'Library', 'Application Support', 'Claude', file)];
+  if (process.platform !== 'win32') return [path.join(home, '.config', 'Claude', file)];
+
+  const paths = [];
+  const pkgs = path.join(process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local'), 'Packages');
+  try {
+    for (const d of fs.readdirSync(pkgs)) {
+      const dir = path.join(pkgs, d, 'LocalCache', 'Roaming', 'Claude');
+      if (/^Claude_/i.test(d) && fs.existsSync(dir)) paths.push(path.join(dir, file));
+    }
+  } catch (_) { /* no Packages dir */ }
+  const classic = path.join(process.env.APPDATA || path.join(home, 'AppData', 'Roaming'), 'Claude', file);
+  if (!paths.length || fs.existsSync(classic)) paths.push(classic);
+  return paths;
 }
 const codeConfigPath = () => process.env.CLAUDE_CODE_CONFIG || path.join(os.homedir(), '.claude.json');
 
@@ -109,7 +126,7 @@ async function tokenState(account) {
 
 async function status() {
   const { listAccounts } = require('../lib');
-  const desk = (readJson(desktopConfigPath()) || {}).mcpServers || {};
+  const desk = Object.assign({}, ...desktopConfigPaths().map((f) => (readJson(f) || {}).mcpServers || {}));
   const code = (readJson(codeConfigPath()) || {}).mcpServers || {};
   const accounts = new Set(listAccounts());
   for (const n of [...Object.keys(desk), ...Object.keys(code)]) if (n.startsWith('outlook-')) accounts.add(n.slice(8));
@@ -145,12 +162,14 @@ async function setup(account, { reauth }) {
 
   const name = `outlook-${account}`;
   const entry = { command: 'node', args: [INDEX], env: { OUTLOOK_ACCOUNT: account } };
-  console.log('[2/3] Claude Desktop:', upsertServer(desktopConfigPath(), name, entry, { createIfMissing: true }), `(${name})`);
+  for (const f of desktopConfigPaths()) {
+    console.log('[2/3] Claude Desktop:', upsertServer(f, name, entry, { createIfMissing: true }), `(${name}) -> ${f}`);
+  }
   console.log('[3/3] Claude Code:   ', upsertServer(codeConfigPath(), name, { type: 'stdio', ...entry }, { createIfMissing: false }), `(${name})`);
   console.log('\nDone. Fully quit Claude Desktop (tray icon → Quit) and reopen it to load the new server.');
 }
 
-module.exports = { upsertServer, desktopConfigPath, codeConfigPath };
+module.exports = { upsertServer, desktopConfigPaths, codeConfigPath };
 if (require.main !== module) return;
 
 (async () => {
