@@ -6,10 +6,12 @@ description: Use for large Outlook jobs (scanning, summarizing, or filing hundre
 # Outlook bulk work via code execution
 
 ## Pick the path
-| Job size | Use |
+| Job | Use |
 |---|---|
-| A handful of items (read 3 emails, one event) | Direct MCP tools: `outlook-<account>` server |
-| Hundreds+ items, aggregation, reports, bulk moves | A script against `lib/` (this skill) |
+| A handful of items (read 3 emails, one event) | Direct tools: `list-emails`, `read-email`, ... |
+| Inbox overview / top senders / cleanup planning | `mailbox-stats` (server-side scan, compact output) — works from any chat |
+| Move / archive / mark-read everything from a sender or @domain | `bulk-email-action` — dry run first, then `dryRun:false` only after explicit approval |
+| Anything else large, on the PC itself (Claude Code) | A script against `lib/` (below) |
 
 ## How
 1. Repo: `C:\Users\shawn\repos\outlook-mcp` (Node). Accounts: `node -e "console.log(require('./lib').listAccounts())"`.
