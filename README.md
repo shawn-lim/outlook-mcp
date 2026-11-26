@@ -140,6 +140,12 @@ npm run status              # sign-in + registration state of every account
 Then fully quit and reopen Claude Desktop. Config files are backed up to `*.bak` before edits.
 `--reauth` forces a fresh sign-in (e.g. to switch which Microsoft account a name points to).
 
+## Token Guards
+
+- `read-email` bodies are capped at 6000 chars (~1.5k tokens) with a truncation note. Override per call with `maxChars`, or globally with `OUTLOOK_MAX_BODY_CHARS` (0 = unlimited).
+- `list-emails` / `search-emails` return at most 50 headers per call.
+- Bulk work goes through `lib/` scripts that print compact summaries (see Code Execution Mode).
+
 ## Multiple Accounts
 
 One Azure app registration serves every mailbox; each account gets its own token file

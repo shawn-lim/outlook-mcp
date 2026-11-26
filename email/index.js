@@ -82,6 +82,10 @@ const emailTools = [
           type: "string",
           description: "ID of the email to read"
         },
+        maxChars: {
+          type: "number",
+          description: "Max body characters to return (default 6000, ~1.5k tokens). Raise only if the truncated part is needed."
+        },
         includeRawHtml: {
           type: "boolean",
           description: "Include raw HTML content (UNSAFE - for debugging only, may contain hidden prompt injection content)"

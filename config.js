@@ -37,6 +37,8 @@ const authorityHost = (process.env.MS_AUTHORITY_HOST || 'https://login.microsoft
 module.exports = {
   resolveTokenPath,
   DEBUG: process.env.OUTLOOK_DEBUG === 'true',
+  // Token guard for read-email bodies (0 = unlimited)
+  MAX_BODY_CHARS: process.env.OUTLOOK_MAX_BODY_CHARS !== undefined ? Number(process.env.OUTLOOK_MAX_BODY_CHARS) : 6000,
   // Server information
   SERVER_NAME: "m365-assistant",
   SERVER_VERSION: "2.0.0",

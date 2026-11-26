@@ -19,6 +19,8 @@ const { processHtmlEmail, sanitizeHtmlToText } = require('../utils/html-sanitize
 async function handleReadEmail(args) {
   const emailId = args.id;
   const includeRawHtml = args.includeRawHtml === true;
+  // Token guard: cap body size so one newsletter can't eat thousands of tokens.
+  const maxChars = Number(args.maxChars) > 0 ? Number(args.maxChars) : config.MAX_BODY_CHARS;
 
   if (!emailId) {
     return {
@@ -91,6 +93,11 @@ async function handleReadEmail(args) {
         }
       } else {
         body = email.bodyPreview || 'No content';
+      }
+
+      if (maxChars && body.length > maxChars) {
+        body = body.slice(0, maxChars) +
+          `\n\n[Body truncated: showing ${maxChars} of ${body.length} characters. Call read-email again with a larger maxChars only if the rest is needed.]`;
       }
 
       // Format the email
