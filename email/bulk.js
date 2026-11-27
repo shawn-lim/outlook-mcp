@@ -39,6 +39,12 @@ async function destinationId(token, folder) {
 const addrOf = (m) => ((m.from && m.from.emailAddress && m.from.emailAddress.address) || 'unknown').toLowerCase();
 const domainOf = (a) => (a.includes('@') ? a.split('@').pop() : a);
 
+/** Normalise "a@x.com" | "@x.com, @y.com" | ["@x.com", "b@y.com"] into a list of filters. */
+function parseFrom(from) {
+  const list = Array.isArray(from) ? from : String(from || '').split(',');
+  return [...new Set(list.map((f) => String(f).trim().toLowerCase()).filter(Boolean))];
+}
+
 /** Does a message match a sender filter? "@domain.com" / "domain.com" match the domain, otherwise exact address. */
 function matcher(from) {
   const f = String(from).trim().toLowerCase();
@@ -100,52 +106,98 @@ async function handleMailboxStats(args = {}) {
   }
 }
 
-/** Run Graph $batch requests 20 at a time; returns { ok, failed }. */
-async function runBatches(token, requests) {
-  let ok = 0, failed = 0;
-  for (let i = 0; i < requests.length; i += BATCH) {
-    const chunk = requests.slice(i, i + BATCH).map((r, j) => ({ id: String(j), ...r }));
-    const res = await callGraphAPI(token, 'POST', BATCH_URL, { requests: chunk });
-    for (const r of res.responses || []) (r.status >= 200 && r.status < 300 ? ok++ : failed++);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const CONCURRENCY = 4;   // Graph allows ~4 concurrent requests per mailbox
+const jobs = new Map();  // in-memory; lives as long as the server process
+let jobSeq = 0;
+
+/** Send one $batch of up to 20 requests, retrying throttled (429/503) items with backoff. */
+async function sendBatch(token, reqs, attempt = 0) {
+  const chunk = reqs.map((r, j) => ({ id: String(j), ...r }));
+  const res = await callGraphAPI(token, 'POST', BATCH_URL, { requests: chunk });
+  let ok = 0, failed = 0, wait = 0;
+  const retry = [];
+  for (const r of res.responses || []) {
+    if (r.status >= 200 && r.status < 300) ok++;
+    else if ((r.status === 429 || r.status === 503) && attempt < 4) {
+      retry.push(reqs[Number(r.id)]);
+      wait = Math.max(wait, Number(r.headers && r.headers['Retry-After']) || 2 ** attempt * 2);
+    } else failed++;
+  }
+  if (retry.length) {
+    await sleep(wait * 1000);
+    const again = await sendBatch(token, retry, attempt + 1);
+    ok += again.ok; failed += again.failed;
   }
   return { ok, failed };
 }
 
+/** Run all requests in $batch chunks with limited concurrency; reports progress via onProgress. */
+async function runBatches(token, requests, onProgress = () => {}) {
+  const chunks = [];
+  for (let i = 0; i < requests.length; i += BATCH) chunks.push(requests.slice(i, i + BATCH));
+  let ok = 0, failed = 0, next = 0;
+  async function worker() {
+    while (next < chunks.length) {
+      const c = chunks[next++];
+      try {
+        const r = await sendBatch(token, c);
+        ok += r.ok; failed += r.failed;
+      } catch (e) {
+        failed += c.length;
+      }
+      onProgress(ok, failed);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, chunks.length) }, worker));
+  return { ok, failed };
+}
+
+const BACKGROUND_THRESHOLD = 200; // larger runs return a job id immediately
+
 async function handleBulkEmailAction(args = {}) {
   const action = args.action;
   if (!['move', 'archive', 'mark-read'].includes(action)) return text("action must be 'move', 'archive' or 'mark-read'.");
-  if (!args.from) return text("from is required: a sender address (a@x.com) or a domain (@x.com).");
+  const filters = parseFrom(args.from);
+  if (!filters.length) return text("from is required: sender address(es) and/or domain(s), e.g. [\"@x.com\", \"a@y.com\"].");
   if (action === 'move' && !args.destinationFolder) return text("destinationFolder is required for action 'move'.");
   const dryRun = args.dryRun !== false;
-  const maxItems = clamp(args.maxItems, 1000, 20000);
-  const maxScan = clamp(args.maxScan, 20000, 100000);
+  const maxItems = clamp(args.maxItems, 50000, 100000);
+  const maxScan = clamp(args.maxScan, 100000, 200000);
 
   try {
     const token = await ensureAuthenticated();
     const path = await sourcePath(token, args.folder);
     const dest = action === 'move' ? await destinationId(token, args.destinationFolder)
       : action === 'archive' ? 'archive' : null;
-    const match = matcher(args.from);
+    const matchers = filters.map((f) => [f, matcher(f)]);
 
+    // One pass over the folder for every sender.
     const hits = [];
+    const perFilter = new Map(filters.map((f) => [f, { n: 0, sample: null }]));
     let scanned = 0;
     for await (const m of scan(token, path, 'id,from,subject,isRead,receivedDateTime', maxScan)) {
       scanned++;
-      if (!match(addrOf(m))) continue;
       if (action === 'mark-read' && m.isRead) continue;
+      const a = addrOf(m);
+      const hit = matchers.find(([, fn]) => fn(a));
+      if (!hit) continue;
+      const pf = perFilter.get(hit[0]);
+      pf.n++;
+      if (!pf.sample) pf.sample = `${String(m.receivedDateTime).slice(0, 10)} ${m.subject || '(no subject)'}`;
       hits.push(m);
       if (hits.length >= maxItems) break;
     }
 
     const verb = action === 'mark-read' ? 'mark as read' : action === 'archive' ? 'archive' : `move to "${args.destinationFolder}"`;
-    const where = `${args.folder || 'inbox'}${scanned >= maxScan ? ` (first ${scanned} scanned)` : ''}`;
-    if (!hits.length) return text(`No messages from ${args.from} to ${verb} in ${where}.`);
+    const where = `${args.folder || 'inbox'}${scanned >= maxScan ? ` (first ${scanned} scanned)` : ` (${scanned} scanned)`}`;
+    if (!hits.length) return text(`No messages from ${filters.join(', ')} to ${verb} in ${where}.`);
 
+    const breakdown = [...perFilter].map(([f, v]) => `  - ${f}: ${v.n}${v.sample ? ` (e.g. ${v.sample.slice(0, 70)})` : ''}`).join('\n');
     if (dryRun) {
-      const sample = hits.slice(0, 3).map((m) => `  - ${String(m.receivedDateTime).slice(0, 10)} ${m.subject || '(no subject)'}`).join('\n');
       return text(
-        `DRY RUN — nothing changed. Would ${verb}: ${hits.length} message(s) from ${args.from} in ${where}` +
-        `${hits.length >= maxItems ? ` (capped at maxItems=${maxItems})` : ''}.\nSample:\n${sample}\n` +
+        `DRY RUN — nothing changed. Would ${verb} ${hits.length} message(s) in ${where}` +
+        `${hits.length >= maxItems ? ` (capped at maxItems=${maxItems})` : ''}:\n${breakdown}\n` +
         `Get the user's explicit OK, then call again with dryRun:false.`
       );
     }
@@ -153,11 +205,31 @@ async function handleBulkEmailAction(args = {}) {
     const requests = hits.map((m) => action === 'mark-read'
       ? { method: 'PATCH', url: `/me/messages/${encodeURIComponent(m.id)}`, headers: { 'Content-Type': 'application/json' }, body: { isRead: true } }
       : { method: 'POST', url: `/me/messages/${encodeURIComponent(m.id)}/move`, headers: { 'Content-Type': 'application/json' }, body: { destinationId: dest } });
-    const { ok, failed } = await runBatches(token, requests);
-    return text(`Done: ${verb} — ${ok} succeeded${failed ? `, ${failed} failed (re-run to retry)` : ''} (from ${args.from}, ${where}).`);
+
+    if (requests.length <= BACKGROUND_THRESHOLD) {
+      const { ok, failed } = await runBatches(token, requests);
+      return text(`Done: ${verb} — ${ok} succeeded${failed ? `, ${failed} failed (re-run to retry)` : ''}.\n${breakdown}`);
+    }
+
+    const id = `job-${++jobSeq}`;
+    const job = { id, verb, total: requests.length, ok: 0, failed: 0, state: 'running', started: Date.now(), breakdown };
+    jobs.set(id, job);
+    runBatches(token, requests, (ok, failed) => { job.ok = ok; job.failed = failed; })
+      .then(({ ok, failed }) => Object.assign(job, { ok, failed, state: 'done', finished: Date.now() }))
+      .catch((e) => Object.assign(job, { state: 'error', error: e.message, finished: Date.now() }));
+    return text(`Started ${id}: ${verb} ${requests.length} message(s) in the background.\n${breakdown}\nCheck progress with bulk-job-status (id: ${id}).`);
   } catch (e) {
     return text(e.message === 'Authentication required' ? "Authentication required. Use the 'authenticate' tool first." : `Error: ${e.message}`);
   }
+}
+
+async function handleBulkJobStatus(args = {}) {
+  const list = args.id ? [jobs.get(args.id)].filter(Boolean) : [...jobs.values()].slice(-5);
+  if (!list.length) return text(args.id ? `No job ${args.id} (jobs reset when the server restarts).` : 'No bulk jobs yet.');
+  return text(list.map((j) => {
+    const secs = Math.round(((j.finished || Date.now()) - j.started) / 1000);
+    return `${j.id}: ${j.state} — ${j.verb}: ${j.ok}/${j.total} done${j.failed ? `, ${j.failed} failed` : ''} (${secs}s)${j.error ? ` error: ${j.error}` : ''}`;
+  }).join('\n'));
 }
 
 const bulkTools = [
@@ -180,22 +252,28 @@ const bulkTools = [
   },
   {
     name: 'bulk-email-action',
-    description: "Move, archive or mark-read every message from a sender (a@x.com) or domain (@x.com) in a folder. DRY RUN by default — returns count + sample and changes nothing. Only call with dryRun:false after the user explicitly approves that exact action.",
+    description: "Move, archive or mark-read every message from one or more senders (a@x.com) or domains (@x.com) in ONE pass over the folder. DRY RUN by default — returns per-sender counts + samples and changes nothing. Only call with dryRun:false after the user explicitly approves that exact action. Runs over 200 messages continue in the background; poll bulk-job-status.",
     inputSchema: {
       type: 'object',
       properties: {
         action: { type: 'string', enum: ['move', 'archive', 'mark-read'], description: 'What to do' },
-        from: { type: 'string', description: 'Sender address (a@x.com) or domain (@x.com)' },
+        from: { type: 'array', items: { type: 'string' }, description: 'Sender addresses (a@x.com) and/or domains (@x.com): an array, or a comma-separated string' },
         folder: { type: 'string', description: "Source folder (default 'inbox')" },
         destinationFolder: { type: 'string', description: "For 'move': target folder name (well-known or top-level)" },
-        maxItems: { type: 'number', description: 'Max messages to act on (default 1000, max 20000)' },
-        maxScan: { type: 'number', description: 'Max messages to scan to find matches (default 20000, max 100000)' },
+        maxItems: { type: 'number', description: 'Max messages to act on (default 50000, max 100000)' },
+        maxScan: { type: 'number', description: 'Max messages to scan to find matches (default 100000, max 200000)' },
         dryRun: { type: 'boolean', description: 'Default true. Set false only after user approval.' }
       },
       required: ['action', 'from']
     },
     handler: handleBulkEmailAction
+  },
+  {
+    name: 'bulk-job-status',
+    description: 'Progress of background bulk-email-action jobs (one by id, or the last 5).',
+    inputSchema: { type: 'object', properties: { id: { type: 'string', description: 'Job id, e.g. job-1' } }, required: [] },
+    handler: handleBulkJobStatus
   }
 ];
 
-module.exports = { bulkTools, handleMailboxStats, handleBulkEmailAction, matcher };
+module.exports = { bulkTools, handleMailboxStats, handleBulkEmailAction, handleBulkJobStatus, matcher, parseFrom };
