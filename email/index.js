@@ -8,6 +8,7 @@ const handleSendEmail = require('./send');
 const handleDraftEmail = require('./draft');
 const handleMarkAsRead = require('./mark-as-read');
 const { bulkTools } = require('./bulk');
+const { attachmentTools } = require('./attachments');
 
 // Email tool definitions
 const emailTools = [
@@ -195,7 +196,8 @@ const emailTools = [
     },
     handler: handleMarkAsRead
   },
-  ...bulkTools
+  ...bulkTools,
+  ...attachmentTools
 ];
 
 module.exports = {
