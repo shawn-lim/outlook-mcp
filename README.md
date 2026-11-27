@@ -171,7 +171,7 @@ registration audience that includes personal accounts.
 
 Run inside the MCP server, so any connected chat can use them and only a summary comes back:
 - `mailbox-stats` — scan up to 100k messages; top senders/domains with unread counts.
-- `bulk-email-action` — move / archive / mark-read all mail from a list of senders and/or `@domain`s in one pass, via Graph `$batch` (4 concurrent, throttling retries). **Dry run by default**; executes only with `dryRun: false`. Runs over 200 messages continue in the background — poll `bulk-job-status`.
+- `bulk-email-action` — move / archive / mark-read all mail from a list of senders and/or `@domain`s in one pass, via Graph `$batch` (one batch at a time = 4 parallel requests, the per-mailbox limit; throttling retries). **Dry run by default**; executes only with `dryRun: false`. Runs over 200 messages continue in the background — poll `bulk-job-status`.
 
 ## Code Execution Mode (bulk tasks)
 

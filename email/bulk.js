@@ -107,7 +107,9 @@ async function handleMailboxStats(args = {}) {
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const CONCURRENCY = 4;   // Graph allows ~4 concurrent requests per mailbox
+// Graph already fans each $batch out to up to 4 parallel requests, and Outlook allows
+// 4 concurrent requests per mailbox — so send one batch at a time to stay under the limit.
+const CONCURRENCY = 1;
 const jobs = new Map();  // in-memory; lives as long as the server process
 let jobSeq = 0;
 
