@@ -10,7 +10,7 @@ description: Use for large Outlook jobs (scanning, summarizing, or filing hundre
 |---|---|
 | A handful of items (read 3 emails, one event) | Direct tools: `list-emails`, `read-email`, ... |
 | Inbox overview / top senders / cleanup planning | `mailbox-stats` (server-side scan, compact output) — works from any chat |
-| Move / archive / mark-read everything from a sender or @domain | `bulk-email-action` — dry run first, then `dryRun:false` only after explicit approval |
+| Move / archive / mark-read everything from one or many senders or @domains | `bulk-email-action` with an array of senders (one pass) — dry run first, `dryRun:false` only after explicit approval; poll `bulk-job-status` for big runs |
 | Anything else large, on the PC itself (Claude Code) | A script against `lib/` (below) |
 
 ## How
