@@ -117,6 +117,10 @@ const rulesTools = [
           type: "string",
           description: "Comma-separated list of sender email addresses for the rule"
         },
+        senderContains: {
+          type: "string",
+          description: "Comma-separated sender substrings, e.g. \"@shop.com, news.example.ca\" - matches a whole domain"
+        },
         containsSubject: {
           type: "string",
           description: "Subject text the email must contain"
