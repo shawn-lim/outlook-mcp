@@ -140,6 +140,13 @@ npm run status              # sign-in + registration state of every account
 Then fully quit and reopen Claude Desktop. Config files are backed up to `*.bak` before edits.
 `--reauth` forces a fresh sign-in (e.g. to switch which Microsoft account a name points to).
 
+## Attachments
+
+- `list-attachments` — names, types, sizes and attachment IDs for a message.
+- `download-attachment` — saves one attachment to a folder **on this PC**, only inside allowed roots
+  (default `~/.outlook-mcp/attachments` and `~/iCloudDrive`; override with `OUTLOOK_ATTACHMENT_ROOTS`, `;`-separated on Windows).
+  Creates the folder, never overwrites unless `overwrite: true`, sanitises file names, rejects path traversal.
+
 ## Token Guards
 
 - `read-email` bodies are capped at 6000 chars (~1.5k tokens) with a truncation note. Override per call with `maxChars`, or globally with `OUTLOOK_MAX_BODY_CHARS` (0 = unlimited).
