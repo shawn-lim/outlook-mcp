@@ -15,6 +15,7 @@ async function handleCreateRule(args) {
   const {
     name,
     fromAddresses,
+    senderContains,
     containsSubject,
     hasAttachments,
     moveToFolder,
@@ -43,14 +44,14 @@ async function handleCreateRule(args) {
   }
   
   // Validate that at least one condition or action is specified
-  const hasCondition = fromAddresses || containsSubject || hasAttachments === true;
+  const hasCondition = fromAddresses || senderContains || containsSubject || hasAttachments === true;
   const hasAction = moveToFolder || markAsRead === true;
   
   if (!hasCondition) {
     return {
       content: [{ 
         type: "text", 
-        text: "At least one condition is required. Specify fromAddresses, containsSubject, or hasAttachments."
+        text: "At least one condition is required. Specify fromAddresses, senderContains, containsSubject, or hasAttachments."
       }]
     };
   }
@@ -72,6 +73,7 @@ async function handleCreateRule(args) {
     const result = await createInboxRule(accessToken, {
       name,
       fromAddresses,
+      senderContains,
       containsSubject,
       hasAttachments,
       moveToFolder,
@@ -123,6 +125,7 @@ async function createInboxRule(accessToken, ruleOptions) {
     const {
       name,
       fromAddresses,
+      senderContains,
       containsSubject,
       hasAttachments,
       moveToFolder,
@@ -185,6 +188,14 @@ async function createInboxRule(accessToken, ruleOptions) {
       }
     }
     
+    if (senderContains) {
+      // Substring match on the sender (e.g. "@shop.com" or "shop.com") - lets one rule cover a whole domain.
+      const parts = (Array.isArray(senderContains) ? senderContains : String(senderContains).split(','))
+        .map((p) => String(p).trim())
+        .filter(Boolean);
+      if (parts.length > 0) rule.conditions.senderContains = parts;
+    }
+
     if (containsSubject) {
       rule.conditions.subjectContains = [containsSubject];
     }
